@@ -1,0 +1,94 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Employee Management System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/css/styles.css" />
+
+</head>
+
+<body>
+    <header class="navbar">
+        <div style="font-weight:600; font-size:18px;">EMS</div>
+        <nav class="nav-links">
+            <a href="home.html">Home</a>
+            <a href="/index.html?view=list">Employees</a>
+            <a href="/index.html?view=form">Add Employee</a>
+            <a href="#contact">Contact Us</a>
+        </nav>
+    </header>
+
+    <div class="hero-card">
+        <h1>EMPLOYEE MANAGEMENT SYSTEM</h1>
+        <p>Manage employees effectively with Add, Edit, Search, Sort, Pagination & more.</p>
+
+        <div id="stats" style="margin-bottom: 28px;">
+            <div style="display:flex; justify-content:center; gap:60px; flex-wrap:wrap;">
+
+                <div style="text-align:center;">
+                    <div id="totalCount" class="count-circle">0</div>
+                    <div class="count-label">Total Employees</div>
+                </div>
+
+                <div style="text-align:center;">
+                    <div id="activeCount" class="count-circle">0</div>
+                    <div class="count-label">Active Employees</div>
+                </div>
+
+            </div>
+        </div>
+
+
+
+        <div class="hero-buttons">
+            <button class="btn btn-green" onclick="location.href='/index.html?view=list'">View Employees</button>
+            <button class="btn btn-green" onclick="location.href='/index.html?view=form'">Add Employee</button>
+        </div>
+    </div>
+
+    <footer id="contact">
+        <p><strong>Contact Us</strong><br />Email: support@ems.com | Phone: +91 98765 43210</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const API_BASE = window.location.origin;
+
+        async function loadHomeStats() {
+            try {
+                const res = await fetch(`${API_BASE}/api/employees/counts`, { cache: 'no-store' });
+                if (!res.ok) throw new Error('Counts endpoint failed');
+                const data = await res.json(); // { total, active }
+                
+                document.getElementById('totalCount').textContent = data.total ?? 0;
+                document.getElementById('activeCount').textContent = data.active ?? 0;
+
+                const ctx = document.getElementById('empChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Total', 'Active'],
+                        datasets: [{
+                            data: [data.total || 0, data.active || 0],
+                            backgroundColor: ['#2b7a44', '#68b67c']
+                        }]
+                    },
+                    options: {
+                        responsive: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, precision: 0 } }
+                    }
+                });
+            } catch (err) {
+                console.error(err);
+                document.getElementById('empChart').outerHTML =
+                    '<div style="margin-top:18px;color:#b00020;">Could not load stats.</div>';
+            }
+        }
+
+        loadHomeStats();
+    </script>
+
+</body>
+</html>

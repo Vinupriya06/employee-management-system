@@ -1,0 +1,457 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Employee Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="toolbar">
+            <a href="/home.html" class="btn">Back to Home</a>
+        </div>
+
+        <section id="listSection">
+            <h1>Employees List</h1>
+
+            <div class="card">
+                <div class="toolbar">
+                    <button id="btnShowForm" class="btn btn-success">Add Employee</button>
+
+                    <input type="text" id="txtSearch" placeholder="Search name or email" />
+                    <button id="btnSearch">Search</button>
+                    <button id="btnClear">Clear</button>
+                </div>
+
+                <table id="empTable">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-col="FirstName">First Name</th>
+                            <th class="sortable" data-col="LastName">Last Name</th>
+                            <th class="sortable" data-col="Email">Email</th>
+                            <th class="sortable" data-col="DateOfBirth">Date of Birth</th>
+                            <th class="sortable" data-col="IsActive">Is Active</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody><!-- rows injected by JS --></tbody>
+                </table>
+
+                <div class="toolbar" style="margin-top: 12px;">
+                    <button id="btnPrev" class="btn">&laquo; Prev</button>
+                    <span id="pageInfo"></span>
+                    <button id="btnNext" class="btn">Next &raquo;</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="formSection" class="hidden">
+            <div class="card form-card">
+                <h1 id="formTitle">Create New Employee</h1>
+
+                <form id="empForm" novalidate>
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label>First Name *</label>
+                            <input type="text" id="firstName" maxlength="50" />
+                            <div class="error" id="errFirstName"></div>
+                        </div>
+
+                        <div class="form-field">
+                            <label>Last Name *</label>
+                            <input type="text" id="lastName" maxlength="50" />
+                            <div class="error" id="errLastName"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label>Email *</label>
+                            <input type="email" id="email" maxlength="100" />
+                            <div class="error" id="errEmail"></div>
+                        </div>
+
+                        <div class="form-field">
+                            <label>Date of Birth</label>
+                            <div class="input-with-icon">
+                                <i class="fa-regular fa-calendar icon-click"
+                                   style="position:absolute; left:90%; top:50%; transform:translateY(-50%);color:#2b7a44; font-size:16px; cursor:pointer;"></i>
+                                <input type="text" id="dob" placeholder="Select Date" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-field full-span">
+                            <label><input type="checkbox" id="isActive" checked /> Is Active</label>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" id="btnSave" class="btn btn-success">Save</button>
+                        <button type="button" id="btnCancel" class="btn">Cancel</button>
+                        <button type="button" onclick="location.href='/index.html?view=list'" class="btn">Back to List</button>
+                    </div>
+
+                    <input type="hidden" id="employeeId" />
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let editMode = false;
+        let searchText = '';
+        let pageNumber = 1;
+        let pageSize = 5;
+        let sortColumn = null;
+        let sortDirection = null;
+
+        let __toastTimer = null;
+        function showToast(message, isError = false) {
+            const $t = $('#toast');
+            $t.text(message);
+            $t.removeClass('hidden error');
+            if (isError) $t.addClass('error');
+            $t.addClass('show');
+            clearTimeout(__toastTimer);
+            __toastTimer = setTimeout(() => {
+                $t.removeClass('show');
+                setTimeout(() => $t.addClass('hidden'), 320);
+            }, 2500);
+        }
+
+        function showList() {
+            $('#listSection').removeClass('hidden');
+            $('#formSection').addClass('hidden');
+        }
+        function showForm() {
+            $('#formSection').removeClass('hidden');
+            $('#listSection').addClass('hidden');
+            document.querySelector('#formSection').scrollIntoView({ behavior: 'smooth' });
+        }
+        function clearErrors() { $('#errFirstName,#errLastName,#errEmail').text(''); }
+        function resetForm() {
+            $('#employeeId').val('');
+            $('#firstName').val('');
+            $('#lastName').val('');
+            $('#email').val('');
+            $('#dob').val('');
+            $('#isActive').prop('checked', true);
+            clearErrors();
+        }
+        function validateForm() {
+            clearErrors();
+            let ok = true;
+            const first = $('#firstName').val().trim();
+            const last = $('#lastName').val().trim();
+            const email = $('#email').val().trim();
+            if (!first) { $('#errFirstName').text('First name is required'); ok = false; }
+            else if (first.length > 50) { $('#errFirstName').text('Max 50 characters'); ok = false; }
+            if (!last) { $('#errLastName').text('Last name is required'); ok = false; }
+            else if (last.length > 50) { $('#errLastName').text('Max 50 characters'); ok = false; }
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!email) { $('#errEmail').text('Email is required'); ok = false; }
+            else if (email.length > 100) { $('#errEmail').text('Max 100 characters'); ok = false; }
+            else if (!emailRegex.test(email)) { $('#errEmail').text('Enter a valid email'); ok = false; }
+            return ok;
+        }
+
+        function renderRows(items) {
+            const $tbody = $('#empTable tbody').empty();
+            if (!items || items.length === 0) {
+                $tbody.append('<tr><td colspan="6">No employees found.</td></tr>');
+                return;
+            }
+            items.forEach(e => {
+                const dob = e.dateOfBirth ? String(e.dateOfBirth).substring(0, 10) : '';
+                const row = `
+              <tr data-id="${e.employeeId}">
+                <td>${e.firstName}</td>
+                <td>${e.lastName}</td>
+                <td>${e.email}</td>
+                <td>${dob}</td>
+                <td>${e.isActive ? 'Yes' : 'No'}</td>
+                <td class="action-cell">
+                  <i class="fa-solid fa-pen-to-square icon-edit" title="Edit"></i>
+                  <i class="fa-solid fa-trash icon-delete" title="Delete"></i>
+                </td>
+              </tr>`;
+                $tbody.append(row);
+            });
+        }
+        function toInputDate(val) {
+            if (!val) return '';
+            const s = String(val);
+            return s.length >= 10 ? s.substring(0, 10) : s;
+        }
+
+        function getRowValues($tr) {
+            return {
+                firstName: $tr.find('td:eq(0) input').val().trim(),
+                lastName: $tr.find('td:eq(1) input').val().trim(),
+                email: $tr.find('td:eq(2) input').val().trim(),
+                dateOfBirth: $tr.find('td:eq(3) input').val() || null,
+                isActive: $tr.find('td:eq(4) input[type=checkbox]').is(':checked')
+            };
+        }
+        function validateInline(v) {
+            const errors = {};
+            if (!v.firstName) errors.firstName = 'First name required';
+            else if (v.firstName.length > 50) errors.firstName = 'Max 50';
+            if (!v.lastName) errors.lastName = 'Last name required';
+            else if (v.lastName.length > 50) errors.lastName = 'Max 50';
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!v.email) errors.email = 'Email required';
+            else if (v.email.length > 100) errors.email = 'Max 100';
+            else if (!emailRegex.test(v.email)) errors.email = 'Invalid email';
+            return errors;
+        }
+
+        async function loadEmployees() {
+            try {
+                const params = new URLSearchParams({
+                    pageNumber: String(pageNumber),
+                    pageSize: String(pageSize)
+                });
+                if (searchText) params.set('search', searchText);
+                if (sortColumn) params.set('sortColumn', sortColumn);
+                if (sortDirection) params.set('sortDirection', sortDirection);
+
+                const url = `${API_BASE}/api/employees?${params.toString()}`;
+                const res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) throw new Error('Failed to load employees');
+
+                const data = await res.json(); // { totalCount, items }
+                renderRows(data.items);
+
+                const totalPages = Math.max(1, Math.ceil((data.totalCount || 0) / pageSize));
+                $('#pageInfo').text(`Page ${pageNumber} of ${totalPages}`);
+                $('#btnPrev').prop('disabled', pageNumber <= 1);
+                $('#btnNext').prop('disabled', pageNumber >= totalPages);
+            } catch (err) {
+                console.error(err);
+                showToast('Error loading employees', true);
+            }
+        }
+
+        async function startInlineEdit(id) {
+            if ($('tr[data-editing="true"]').length) return;
+
+            const res = await fetch(`${API_BASE}/api/employees/${id}`, { cache: 'no-store' });
+            if (!res.ok) { showToast('Failed to load employee', true); return; }
+            const e = await res.json();
+
+            const $tr = $(`#empTable tbody tr[data-id="${id}"]`);
+            $tr.attr('data-editing', 'true');
+
+            $tr.find('td:eq(0)').html(`<input type="text" value="${e.firstName ?? ''}" maxlength="50" />`);
+            $tr.find('td:eq(1)').html(`<input type="text" value="${e.lastName ?? ''}" maxlength="50" />`);
+            $tr.find('td:eq(2)').html(`<input type="email" value="${e.email ?? ''}" maxlength="100" />`);
+
+            const inlineDobId = `dob-inline-${id}`;
+            $tr.find('td:eq(3)').html(`
+            <div class="input-with-icon">
+              <i class="fa-regular fa-calendar icon-click"
+   style="position:absolute; left:90%; top:50%; transform:translateY(-50%);color:#2b7a44; font-size:16px; cursor:pointer;"></i>
+              <input type="text" id="${inlineDobId}" placeholder="Select Date" />
+            </div>
+          `);
+
+            $tr.find('td:eq(4)').html(`<input type="checkbox" ${e.isActive ? 'checked' : ''} />`);
+
+            $tr.find('td:eq(5)').html(`
+            <i class="fa-solid fa-check icon-save-inline" title="Save"></i>
+            <i class="fa-solid fa-xmark icon-cancel-inline" title="Cancel"></i>
+          `);
+
+            if (window.flatpickr) {
+                flatpickr(`#${inlineDobId}`, {
+                    dateFormat: "Y-m-d",
+                    defaultDate: e.dateOfBirth ? String(e.dateOfBirth).substring(0, 10) : null,
+                    maxDate: "today"
+                });
+            }
+        }
+
+        async function emailExistsUI(email, excludeId) {
+            const params = new URLSearchParams({ pageNumber: '1', pageSize: '5', search: email });
+            const res = await fetch(`${API_BASE}/api/employees?${params.toString()}`, { cache: 'no-store' });
+            if (!res.ok) return false;
+            const data = await res.json();
+            const items = data.items || [];
+            return items.some(e => e.email.toLowerCase() === email.toLowerCase() && e.employeeId !== excludeId);
+        }
+
+        async function loadEmployeeById(id) {
+            const res = await fetch(`${API_BASE}/api/employees/${id}`, { cache: 'no-store' });
+            if (res.status === 404) return showToast('Employee not found', true);
+            if (!res.ok) return showToast('Failed to load employee', true);
+            const e = await res.json();
+            $('#employeeId').val(e.employeeId);
+            $('#firstName').val(e.firstName);
+            $('#lastName').val(e.lastName);
+            $('#email').val(e.email);
+            $('#dob').val(e.dateOfBirth ? new Date(e.dateOfBirth).toISOString().substring(0, 10) : '');
+            $('#isActive').prop('checked', !!e.isActive);
+            editMode = true; $('#formTitle').text('Edit Employee'); clearErrors(); showForm();
+        }
+
+        async function saveEmployee() {
+            if (!validateForm()) return;
+
+            const id = Number($('#employeeId').val() || 0);
+            const first = $('#firstName').val().trim();
+            const last = $('#lastName').val().trim();
+            const email = $('#email').val().trim();
+            const dob = $('#dob').val();
+            const isActive = $('#isActive').is(':checked');
+
+            if (await emailExistsUI(email, editMode ? id : undefined)) {
+                $('#errEmail').text('Email already exists'); return;
+            }
+
+            const payload = {
+                firstName: first, lastName: last, email: email,
+                dateOfBirth: dob || null,
+                isActive: isActive
+            };
+
+            let res;
+            if (editMode) {
+                res = await fetch(`${API_BASE}/api/employees/${id}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+            } else {
+                res = await fetch(`${API_BASE}/api/employees`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+            }
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                if (String(err.message || '').toLowerCase().includes('email')) $('#errEmail').text(err.message);
+                else showToast(err.message || 'Save failed', true);
+                return;
+            }
+
+            resetForm(); editMode = false; showList(); await loadEmployees();
+            showToast('Employee saved successfully');
+        }
+
+        async function deleteEmployee(id) {
+            if (!confirm('Are you sure you want to delete this employee?')) return;
+            const res = await fetch(`${API_BASE}/api/employees/${id}`, { method: 'DELETE' });
+            if (res.status === 404) return showToast('Employee not found', true);
+            if (!res.ok) return showToast('Delete failed', true);
+            await loadEmployees();
+            showToast('Employee deleted successfully');
+        }
+
+        $(function () {
+            $('#btnShowList').on('click', () => { showList(); loadEmployees(); });
+            $('#btnShowForm').on('click', () => {
+                editMode = false; $('#formTitle').text('Add Employee'); resetForm(); showForm();
+            });
+            $('#btnCancel').on('click', () => { showList(); loadEmployees(); });
+
+            $('#btnSearch').on('click', () => { searchText = $('#txtSearch').val().trim(); pageNumber = 1; loadEmployees(); });
+            $('#txtSearch').on('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchText = $('#txtSearch').val().trim(); pageNumber = 1; loadEmployees(); } });
+            $('#btnClear').on('click', () => { $('#txtSearch').val(''); searchText = ''; pageNumber = 1; loadEmployees(); });
+
+            $(document).on('click', '.sortable', function () {
+                const col = $(this).data('col');
+                if (sortColumn === col) sortDirection = (sortDirection === 'asc' ? 'desc' : 'asc');
+                else { sortColumn = col; sortDirection = 'asc'; }
+                pageNumber = 1; loadEmployees();
+            });
+
+            if (window.flatpickr) {
+                flatpickr("#dob", {
+                    dateFormat: "Y-m-d",
+                    maxDate: "today",
+                    allowInput: true
+                });            }
+            $(document).on('click', '.input-with-icon .icon-click', function () {
+                const input = $(this).siblings('input')[0];
+                if (input && input._flatpickr) input._flatpickr.open();
+                else input?.focus();
+            });
+
+            $('#btnPrev').on('click', () => { if (pageNumber > 1) { pageNumber--; loadEmployees(); } });
+            $('#btnNext').on('click', () => { pageNumber++; loadEmployees(); });
+
+            // CRUD
+            $('#btnSave').on('click', saveEmployee);
+            $(document).on('click', '.icon-edit', function () {
+                const id = $(this).closest('tr').data('id');
+                startInlineEdit(id);
+            });
+            $(document).on('click', '.icon-delete', function () {
+                deleteEmployee($(this).closest('tr').data('id'));
+            });
+            $(document).on('click', '.icon-cancel-inline', async function () {
+                await loadEmployees();
+            });
+            $(document).on('click', '.icon-save-inline', async function () {
+                const $tr = $(this).closest('tr');
+                const id = $tr.data('id');
+                const values = getRowValues($tr);
+                const errs = validateInline(values);
+                if (Object.keys(errs).length) {
+                    if (errs.firstName) $tr.find('td:eq(0) input').attr('title', errs.firstName).css('border-color', '#dc2626');
+                    if (errs.lastName) $tr.find('td:eq(1) input').attr('title', errs.lastName).css('border-color', '#dc2626');
+                    if (errs.email) $tr.find('td:eq(2) input').attr('title', errs.email).css('border-color', '#dc2626');
+                    return;
+                }
+                if (await emailExistsUI(values.email, id)) {
+                    $tr.find('td:eq(2) input').attr('title', 'Email already exists').css('border-color', '#dc2626').focus();
+                    return;
+                }
+                const payload = {
+                    firstName: values.firstName,
+                    lastName: values.lastName,
+                    email: values.email,
+                    dateOfBirth: values.dateOfBirth || null,
+                    isActive: values.isActive
+                };
+                try {
+                    const res = await fetch(`${API_BASE}/api/employees/${id}`, {
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                    });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        showToast(err.message || 'Update failed', true);
+                        return;
+                    }
+                    await loadEmployees();
+                    showToast('Employee updated');
+                } catch (e) {
+                    console.error(e);
+                    showToast('Could not save changes', true);
+                }
+            });
+
+            const params = new URLSearchParams(window.location.search);
+            const view = params.get('view');
+            if (view === 'form') {
+                editMode = false;
+                $('#formTitle').text('Add Employee');
+                resetForm();
+                showForm();
+            } else {
+                showList();
+                loadEmployees();
+            }
+        });
+    </script>
+</body>
+</html>

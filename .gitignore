@@ -1,0 +1,30 @@
+# Build artifacts
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+*.log
+
+# User-specific
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS/IDE
+.vs/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Packages
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Secrets/config (keep your real secrets out of git)
+*.env
+appsettings.*.json
