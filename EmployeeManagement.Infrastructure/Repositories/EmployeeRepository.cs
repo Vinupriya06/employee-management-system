@@ -60,7 +60,8 @@ namespace EmployeeManagement.Infrastructure.Repositories
             var entity = await _db.Employees.FindAsync(id);
             if (entity != null)
             {
-                _db.Employees.Remove(entity);
+                entity.IsActive = false; 
+                _db.Employees.Update(entity);
                 await _db.SaveChangesAsync();
             }
         }
